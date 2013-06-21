@@ -1,6 +1,8 @@
 # CachedEnumeration
 
-loads your active record objects into memory so you don't have to include them
+Loads your active record objects into memory so you don't have to include them.
+
+Currently only working for the ActiveRecord/Rails 2.3 series. A Rails 3.2 version is on the way.
 
 ## Installation
 
