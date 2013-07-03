@@ -95,7 +95,7 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
 
   end
 
-  context "options" do
+  context "multiple keys" do
     it 'it should store by multiple keys (hashing)' do
       one
       @klass.cache_enumeration(:hashed => ['id', 'other', 'name']).cache!
@@ -106,11 +106,15 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
       @klass.find_by_name('one').id.should ==one.id
       @klass.by_name('one').id.should == one.id
     end
-
+  end
+  context "sorting of all" do
     it 'should sort by option' do
       one; two; three
-      @klass.cache_enumeration(:order => 'name')
+      @klass.cache_enumeration(:order => 'name').cache!
+      @klass.connection.should_not_receive(:exec_query)
+
       @klass.cached_all.collect { |item| item.id }.should == [one.id, three.id, two.id]
+      @klass.cached_all.should == @klass.all
     end
 
   end
@@ -128,6 +132,12 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
       one
       @klass.cache_enumeration(:constantize => 'other')
       @klass.cache_enumeration.options[:constantize].should == 'other'
+      @klass::EINS.id.should == one.id
+    end
+
+    it "should contantize by lambda" do
+      one
+      @klass.cache_enumeration(:constantize => lambda { |model| model.other })
       @klass::EINS.id.should == one.id
     end
   end

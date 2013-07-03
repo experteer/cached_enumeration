@@ -122,8 +122,15 @@ and without cache.
 
     def create_constants
       #puts "creating constants #{self.name}"
+      proc=@options[:constantize].respond_to?(:call)
+
       @all.each do |model|
-        const_name=model.send(@options[:constantize]).upcase
+        if proc
+          const_name=@options[:constantize].call(model).upcase
+        else
+          const_name=model.send(@options[:constantize]).upcase
+        end
+
         #puts "caching: #{self.name}::#{const_name}"
         @klass.const_set const_name, model
       end
