@@ -1,11 +1,4 @@
-module ActiveRecord
-  class Base
-    def self.cache_enumeration(params = {})
-      ActiveRecord::Caching::Enumeration.cache_enumeration(self, params)
-    end
-  end
-
-  module Caching
+module CachedEnumeration
 =begin rdoc
 provide cached access to enumeration values
        
@@ -21,7 +14,7 @@ parameters are
 cached methods are:
 find_from_ids( <id> ) or find_from_ids( [ <id>, <id>, ... ] )
    providing cached  find( <id> ) or find( [ <id>, <id>, ... ] )
-find_by_XY / by_XY for all hashed attributes
+find_by_XY / by_XY for all hashed attributes (by_XY is deprecated)
 cached_all 
 
 besides constants using the upcase name are set up providing the entries
@@ -36,131 +29,206 @@ size of the enumeration and the number of accesses to the cached data.
 The by_XY finder should be avoided as the find_by_XY will be available with
 and without cache.
 =end
-    module Enumeration
-      def self.cache_enumeration(base, params)
-        defaults = {
-          :order => 'id',
-          :hashed => ['id', 'name'],
-          :constantize => 'name',
-        }
-        raise "unexpected parameters #{(params.keys - defaults.keys).inspect}, only #{defaults.keys.inspect} are understood" unless (params.keys - defaults.keys).empty?
+  class Cache
+    attr_reader :options
 
-        params = defaults.merge(params)
-        params[:hashed] << 'id' unless params[:hashed].include? 'id'
+    def initialize(base, params)
+      @options=init_options(params)
+      @cache={} #cache by keys
+      @all=[] #cache of all
+      @status=:uncached #can be :uncached,:cashing,:cached
+      @klass=base
 
-        base.cattr_accessor :cache_all
-        base.cattr_accessor :caching
-        base.cattr_accessor :cache_params
-        base.cache_params = params
+      #base.extend(ClassMethods)
+      #base.reset_column_information
+      base_singleton = class << base;
+        self
+      end
 
-        base.extend(ClassMethods)
-        base_singleton = class << base;
-          self
-        end
-        base.cache_params[:hashed].each do |att|
-          base.cattr_accessor "cache_by_#{att}"
-          if att == 'id'
-            base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
-              load_caches
-              self.send("cache_by_#{att}")[key.to_i]
-            end
-          else
-            base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
-              load_caches
-              self.send("cache_by_#{att}")[key]
-            end
-          end
-          base_singleton.__send__(:alias_method, "by_#{att}", "find_by_#{att}")
+      patch_const_missing(base_singleton) if @options[:constantize]
+      create_find_by_methods(base_singleton)
+    end
+
+    def all
+      ensure_caches
+      @all
+    end
+
+    #returns a value from a cache
+    #@param String att name of the attribute
+    #@param String key value of the attribute
+    def get_by(att, key)
+      ensure_caches
+      @cache[att][key]
+    end
+
+    #forces a cache
+    #@return Boolean true is it just cached, false if it was already cached
+    def cache!
+      ensure_caches
+    end
+
+    private
+
+    def ensure_caches
+      return false if cached? || caching?
+      @status=:caching
+
+      hashes = Hash.new do |hash, key|
+        hash[key]=Hash.new
+      end
+
+      @all = @klass.order(@options[:order]).all.freeze
+      @all.each do |entry|
+        entry.freeze # no one should mess with the entries
+        @options[:hashed].each do |att|
+          hashes[att][entry.send(att)] = entry
         end
       end
 
-      module ClassMethods
-        def cached?
-          !!(cache_all && !caching)
-        end
+      create_constants if @options[:constantize]
+
+      @cache=hashes
+      @status=:cached
+      true
+    end
 
 
-        #def find(*args)
-        #  logger.debug("call to #{name}.find( #{args.inspect[1..-2]} )")
-        #  super
-        #end
+    def cached?
+      @status==:cached
+    end
 
-        def find_from_ids(ids, options)
-          load_caches
-          if options.empty? || !options.values.detect { |v| v }
-            # no options or no used options
-            expects_array = ids.first.kind_of?(Array)
-            return ids.first if expects_array && ids.first.empty?
+    def caching?
+      @status==:caching
+    end
 
-            ids = ids.flatten.compact.uniq.collect { |id| id = id.respond_to?(:quoted_id) ? id.quoted_id.to_i : id.to_i }
-            case ids.size
-              when 0
-                raise ActiveRecord::RecordNotFound, "Couldn't find #{name} without an ID"
-              when 1
-                result = cache_by_id[ids[0]] || raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{ids[0]}")
-                expects_array ? [result] : result
-              else
-                ids.inject([]) do |res, id|
-                  res << (cache_by_id[id] || raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}"))
-                end
-            end
-          else # we do not handle options
-            super
-          end
-        end
+    def init_options(params)
+      defaults = {
+        :order => 'id',
+        :hashed => ['id', 'name'],
+        :constantize => 'name',
+      }
+      #params check logic
+      params_diff=params.keys - defaults.keys
+      raise ArgumentError.new("unexpected parameters #{params_diff.inspect}, only #{defaults.keys.inspect} are understood") unless params_diff.empty?
 
-        def cached_all
-          load_caches
-          cache_all
-        end
-
-        private
-        def load_caches(force=false)
-          return false if (cached? && !force) || caching
-          self.caching=true #should use some better form of reentry protection
-
-          hashes = Hash.new do |hash, key|
-            hash[key]=Hash.new
-          end
-          self.cache_all= find(:all, :order => cache_params[:order]).freeze
-          self.cache_all.each do |entry|
-            entry.freeze # no one should mess with the entries
-            cache_params[:hashed].each do |att|
-              hashes[att][entry.send(att)] = entry
-            end
-          end
-          hashes.each do |att, hash|
-            self.send("cache_by_#{att}=", hash.freeze)
-          end
-          create_constants if cache_params[:constantize]
-
-          self.caching=false
-          true
-        end
-
-        private :load_caches
-
-        def const_missing(const_name)
-          if load_caches
-            self.const_get(const_name) #if just created then return
-          else
-            super
-          end
-        end
-
-
-        def create_constants
-          #puts "creating constants #{self.name}"
-          cache_all.each do |model|
-
-            const_name=model.send(cache_params[:constantize]).upcase
-            #puts "caching: #{self.name}::#{const_name}"
-            const_set const_name, model
-          end
-        end
-
-
+      params = defaults.merge(params)
+      params[:hashed] << 'id' unless params[:hashed].include? 'id'
+      params[:hashed].map! do |name|
+        name.to_s
       end
+      params
+    end
+
+    def create_constants
+      #puts "creating constants #{self.name}"
+      @all.each do |model|
+        const_name=model.send(@options[:constantize]).upcase
+        #puts "caching: #{self.name}::#{const_name}"
+        @klass.const_set const_name, model
+      end
+    end
+
+    def create_find_by_methods(base_singleton)
+      @options[:hashed].each do |att|
+        if att == 'id'
+          base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
+            #rewrite to use column type
+            cache_enumeration.get_by(att, key.to_i)
+          end
+        else
+          base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
+            cache_enumeration.get_by(att, key)
+          end
+        end
+        base_singleton.__send__(:alias_method, "by_#{att}", "find_by_#{att}")
+      end
+
+    end
+
+    def patch_const_missing(base_singleton)
+      @klass.extend ConstMissing
+      base_singleton.alias_method_chain :const_missing, :cache_enumeration
+    end
+
+    module ConstMissing
+      def const_missing_with_cache_enumeration(const_name)
+        if cache_enumeration && cache_enumeration.cache! #is we just cache
+          self.const_get(const_name) #try again
+        else
+          super #fails as usual
+        end
+      end
+    end
+  end
+end
+
+
+class ActiveRecord::Relation
+  def find_one_with_cache_enumeration(id)
+    if cache_enumeration_unmodified_query? && cache_enumeration
+      cache_enumeration.get_by('id', id) ||
+        raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}")
+    else
+      find_one_without_cache_enumeration(id)
+    end
+  end
+
+  alias_method_chain :find_one, :cache_enumeration
+
+  def find_some_with_cache_enumeration(ids)
+
+
+    if cache_enumeration_unmodified_query? && cache_enumeration
+      ids.inject([]) do |res, id|
+        res << (cache_enumeration.get_by('id', id) ||
+          raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}"))
+      end
+    else
+      find_some_without_cache_enumeration(ids)
+    end
+  end
+
+  alias_method_chain :find_some, :cache_enumeration
+
+  def all_with_cache_enumeration(*args)
+    if cache_enumeration_unmodified_query? && cache_enumeration
+      cache_enumeration.all
+    else
+      all_without_cache_enumeration(*args)
+    end
+  end
+
+  alias_method_chain :all, :cache_enumeration
+
+  private
+
+  def cache_enumeration_unmodified_query?
+    where_values.blank? &&
+      limit_value.blank? && order_values.blank? &&
+      includes_values.blank? && preload_values.blank? &&
+      readonly_value.nil? && joins_values.blank? &&
+      !@klass.locking_enabled?
+  end
+end
+
+
+module ActiveRecord
+  class Base
+    class << self
+      def cache_enumeration(params = {})
+        if params[:reset]
+          @cache_enumeration = nil
+        else
+          @cache_enumeration ||= CachedEnumeration::Cache.new(self, params)
+        end
+      end
+
+      def cached_all
+        cache_enumeration.all
+      end
+
+
     end
   end
 end

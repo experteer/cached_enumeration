@@ -2,99 +2,134 @@ require 'spec_helper'
 
 
 describe 'ActiveRecord::Base::Caching::Enumeration' do
+  before :all do
+    ActiveRecord::Base.establish_connection(:adapter => "sqlite3", :database => ":memory:")
+
+    ActiveRecord::Migration.create_table :models do |t|
+      t.integer :id
+      t.string :name
+      t.string :other
+    end
+
+  end
+
+
   before do
-    class Model < ActiveRecord::Base
-
-
-      def self.find(* args)
-        if args[0] == :all
-          one = self.new(:name=>'one', :other => 'eins')
-          one.id = 1 # cannot set id in new :-(
-          two = self.new(:name=>'two', :other => 'zwei')
-          two.id = 2
-          three = self.new(:name=>'three', :other => 'drei')
-          three.id = 3
-          args[1][:order] == 'name' ? [one, three, two] : [one, two, three]
-        else
-          super
-        end
-      end
-
-      def self.columns
-        @columns ||= []
-      end
-
-      def self.column(name, sql_type = nil, default = nil, null = true)
-        columns << ActiveRecord::ConnectionAdapters::Column.new(name.to_s, default,
-                                                                sql_type.to_s, null)
-      end
-
-      column :id, 'integer'
-      column :name, 'string'
-      column :other, 'string'
-
-    end
+    @klass=Class.new(ActiveRecord::Base)
+    @klass.table_name="models"
+    @klass.delete_all
+    @klass.create(:name => 'one', :other => 'eins')
+    @klass.create(:name => 'two', :other => 'zwei')
+    @klass.create(:name => 'three', :other => 'drei')
   end
 
-  after do
-    Object.send(:remove_const, :Model)
-  end
+  let(:one) { @klass.find_by_name("one") }
+  let(:three) { @klass.find_by_name("three") }
+  let(:two) { @klass.find_by_name("two") }
 
-  context "basic methods" do
+  context "cached_all and all" do
     before do
-      Model.cache_enumeration
+      @klass.cache_enumeration(:constantize => false)
     end
+
     it 'should provide cached_all' do
-      Model.cached_all.collect { |item| item.id }.should == [1, 2, 3]
-      Model.cached_all.frozen?().should be_true
+      one; two; three
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+
+      @klass.cached_all.size.should == 3
+      @klass.cached_all.collect { |item| item.id }.should == [one.id, two.id, three.id]
+      @klass.cached_all.frozen?().should be_true
+
+      @klass.all.should == @klass.cached_all
+    end
+
+    it "should fire db queries if all is modified" do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.where("name in ('one','two')").all.size.should == 2
+    end
+
+  end
+
+  context "finders" do
+    before do
+      @klass.cache_enumeration(:constantize => false)
     end
 
     it 'should find objects providing id' do
-      Model.find(1).id.should == 1
-      Model.find(1).frozen?().should be_true
-      Model.find([1])[0].id.should == 1
-      Model.find([]).size.should == 0
-      Model.find([1, 3]).collect { |item| item.id }.should == [1, 3]
-      lambda { Model.find(0) }.should raise_error(ActiveRecord::RecordNotFound)
-      lambda { Model.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
+      one; three
+      three=@klass.find_by_name("three")
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+
+      @klass.find(one.id).id.should == one.id
+      @klass.find(one.id).frozen?().should be_true
+      @klass.find([one.id])[0].id.should == one.id
+      @klass.find([]).size.should == 0
+      @klass.find([one.id, three.id]).collect { |item| item.id }.should == [one.id, three.id]
+      lambda { @klass.find(0) }.should raise_error(ActiveRecord::RecordNotFound)
+      lambda { @klass.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
     end
 
-    it 'should find objects by id' do
-      Model.find_by_id(1).id.should == 1
-      Model.by_id(1).id.should == 1
-      Model.find_by_id('1').id.should == 1
-      Model.find_by_id(0).should be_nil
+    it 'should find objects by_id' do
+      one
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+
+      @klass.find_by_id(one.id).id.should == one.id
+      @klass.by_id(one.id).id.should == one.id
+      @klass.find_by_id(one.id.to_s).id.should == one.id
+      @klass.find_by_id(0).should be_nil
     end
 
-    it 'should find objects by name' do
-      Model.find_by_name('one').id.should == 1
-      Model.by_name('one').id.should == 1
-      Model.find_by_name('no such name').should be_nil
+    it 'should find objects by_name' do
+      one
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+
+      @klass.find_by_name('one').id.should == one.id
+      @klass.by_name('one').id.should == one.id
+      @klass.find_by_name('no such name').should be_nil
     end
 
-    it 'should have constants for names' do
-        Model::ONE.id.should == 1
-      end
-    
   end
 
   context "options" do
-  it 'it should store by multiple keys (hashing)' do
-    lambda { Model.find_by_other('eins') }.should raise_error
-    Model.cache_enumeration(:hashed => ['id', 'other'])
-    Model.find_by_other('eins').id.should == 1
-    Model.by_other('eins').id.should == 1
-  end
+    it 'it should store by multiple keys (hashing)' do
+      one
+      @klass.cache_enumeration(:hashed => ['id', 'other', 'name']).cache!
+      @klass.connection.should_not_receive(:exec_query)
 
-  it 'should sort by option' do
-    Model.cache_enumeration(:order => 'name')
-    Model.cached_all.collect { |item| item.id }.should == [1, 3, 2]
-  end
+      @klass.find_by_other('eins').id.should ==one.id
+      @klass.by_other('eins').id.should == one.id
+      @klass.find_by_name('one').id.should ==one.id
+      @klass.by_name('one').id.should == one.id
+    end
 
-  it 'should constantize other fields' do
-    Model.cache_enumeration(:constantize => 'other')
-    Model::EINS.id.should == 1
+    it 'should sort by option' do
+      one; two; three
+      @klass.cache_enumeration(:order => 'name')
+      @klass.cached_all.collect { |item| item.id }.should == [one.id, three.id, two.id]
+    end
+
   end
- end
+  context "constantize" do
+    it "should constantize name by default" do
+      @klass.cache_enumeration.options[:constantize].should == 'name'
+    end
+    it "should without no preloading" do
+      one
+      @klass.cache_enumeration
+      @klass::ONE.id.should == one.id
+    end
+
+    it 'should constantize other fields' do
+      one
+      @klass.cache_enumeration(:constantize => 'other')
+      @klass.cache_enumeration.options[:constantize].should == 'other'
+      @klass::EINS.id.should == one.id
+    end
+  end
 
 end
