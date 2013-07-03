@@ -27,6 +27,20 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
   let(:three) { @klass.find_by_name("three") }
   let(:two) { @klass.find_by_name("two") }
 
+  context "cache_enumeration?" do
+    it "should return the rigth value" do
+      @klass.should_not be_cache_enumeration
+      @klass.cache_enumeration.cache!
+      @klass.should be_cache_enumeration
+    end
+    it "should not cache if not activated" do
+      @klass.all
+      @klass.should_not be_cache_enumeration
+
+    end
+  end
+
+
   context "cached_all and all" do
     before do
       @klass.cache_enumeration(:constantize => false)
@@ -141,5 +155,6 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
       @klass::EINS.id.should == one.id
     end
   end
+
 
 end

@@ -170,10 +170,10 @@ and without cache.
   end
 end
 
-
+#I override find_one, find_some and all so they do a cache lookup first
 class ActiveRecord::Relation
   def find_one_with_cache_enumeration(id)
-    if cache_enumeration_unmodified_query? && cache_enumeration
+    if cache_enumeration_unmodified_query? && cache_enumeration?
       cache_enumeration.get_by('id', id) ||
         raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}")
     else
@@ -184,9 +184,7 @@ class ActiveRecord::Relation
   alias_method_chain :find_one, :cache_enumeration
 
   def find_some_with_cache_enumeration(ids)
-
-
-    if cache_enumeration_unmodified_query? && cache_enumeration
+    if cache_enumeration_unmodified_query? && cache_enumeration?
       ids.inject([]) do |res, id|
         res << (cache_enumeration.get_by('id', id) ||
           raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}"))
@@ -199,7 +197,7 @@ class ActiveRecord::Relation
   alias_method_chain :find_some, :cache_enumeration
 
   def all_with_cache_enumeration(*args)
-    if cache_enumeration_unmodified_query? && cache_enumeration
+    if cache_enumeration_unmodified_query? && cache_enumeration?
       cache_enumeration.all
     else
       all_without_cache_enumeration(*args)
@@ -231,6 +229,11 @@ module ActiveRecord
         end
       end
 
+      def cache_enumeration?
+        !@cache_enumeration.nil?
+      end
+
+      #deprecated as 'all' should work now
       def cached_all
         cache_enumeration.all
       end
