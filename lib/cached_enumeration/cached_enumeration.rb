@@ -160,7 +160,7 @@ and without cache.
 
     module ConstMissing
       def const_missing_with_cache_enumeration(const_name)
-        if cache_enumeration && cache_enumeration.cache! #is we just cache
+        if cache_enumeration.cache! #if we just cached
           self.const_get(const_name) #try again
         else
           super #fails as usual
