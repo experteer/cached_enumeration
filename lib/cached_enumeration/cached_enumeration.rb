@@ -172,6 +172,26 @@ end
 
 #I override find_one, find_some and all so they do a cache lookup first
 class ActiveRecord::Relation
+
+  def find_first_with_cache_enumeration
+    equal_op = nil
+    if cache_enumeration_unmodified_but_where? && cache_enumeration?
+      case
+        when where_values.blank?
+          cache_enumeration.all.first
+        when where_values.size == 1 && where_values[0].operator == :== &&
+          cache_enumeration.options[:hashed].include?(where_values[0].left.name)
+          cache_enumeration.get_by(where_values[0].left.name, where_values[0].right)
+        else
+          find_first_without_cache_enumeration
+      end
+    else
+      find_first_without_cache_enumeration
+    end
+  end
+
+  alias_method_chain :find_first, :cache_enumeration
+
   def find_one_with_cache_enumeration(id)
     if cache_enumeration_unmodified_query? && cache_enumeration?
       cache_enumeration.get_by('id', id) ||
@@ -210,7 +230,11 @@ class ActiveRecord::Relation
 
   def cache_enumeration_unmodified_query?
     where_values.blank? &&
-      limit_value.blank? && order_values.blank? &&
+      cache_enumeration_unmodified_but_where?
+  end
+
+  def cache_enumeration_unmodified_but_where?
+    limit_value.blank? && order_values.blank? &&
       includes_values.blank? && preload_values.blank? &&
       readonly_value.nil? && joins_values.blank? &&
       !@klass.locking_enabled?

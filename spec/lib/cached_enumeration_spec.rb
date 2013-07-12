@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 
-describe 'ActiveRecord::Base::Caching::Enumeration' do
+describe 'simple caching' do
   before :all do
     ActiveRecord::Base.establish_connection(:adapter => "sqlite3", :database => ":memory:")
 
@@ -10,7 +10,6 @@ describe 'ActiveRecord::Base::Caching::Enumeration' do
       t.string :name
       t.string :other
     end
-
   end
 
 
