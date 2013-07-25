@@ -163,7 +163,7 @@ and without cache.
         if cache_enumeration.cache! #if we just cached
           self.const_get(const_name) #try again
         else
-          super #fails as usual
+          const_missing_without_cache_enumeration(const_name) #fails as usual
         end
       end
     end
