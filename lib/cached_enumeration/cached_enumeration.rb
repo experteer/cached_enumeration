@@ -194,7 +194,7 @@ class ActiveRecord::Relation
 
   def find_one_with_cache_enumeration(id)
     if cache_enumeration_unmodified_query? && cache_enumeration?
-      cache_enumeration.get_by('id', id) ||
+      cache_enumeration.get_by('id', id.to_i) ||
         raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}")
     else
       find_one_without_cache_enumeration(id)
@@ -206,7 +206,7 @@ class ActiveRecord::Relation
   def find_some_with_cache_enumeration(ids)
     if cache_enumeration_unmodified_query? && cache_enumeration?
       ids.inject([]) do |res, id|
-        res << (cache_enumeration.get_by('id', id) ||
+        res << (cache_enumeration.get_by('id', id.to_i) ||
           raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}"))
       end
     else
