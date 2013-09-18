@@ -154,6 +154,10 @@ and without cache.
     end
 
     def patch_const_missing(base_singleton)
+      # no class caching in derived classes
+      # introduced to avoid issues with Sales::ProductDomain 
+      # and it's descendents
+      return if @klass.parent.respond_to? :const_missing_with_cache_enumeration
       @klass.extend ConstMissing
       base_singleton.alias_method_chain :const_missing, :cache_enumeration
     end
@@ -217,7 +221,7 @@ class ActiveRecord::Relation
   alias_method_chain :find_some, :cache_enumeration
 
   def all_with_cache_enumeration(*args)
-    if cache_enumeration_unmodified_query? && cache_enumeration?
+    if cache_enumeration_unmodified_query? && args.empty? && cache_enumeration?
       cache_enumeration.all
     else
       all_without_cache_enumeration(*args)

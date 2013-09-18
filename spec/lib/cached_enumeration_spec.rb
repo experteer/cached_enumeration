@@ -63,6 +63,22 @@ describe 'simple caching' do
       @klass.where("name in ('one','two')").all.size.should == 2
     end
 
+    it 'should fire db queries if all has parameters' do
+      @klass.cache_enumeration.cache!
+      @klass.all(:conditions => "name = 'one'").size.should == 1
+    end
+
+  end
+
+  context 'first' do
+    it 'should find the first entry' do
+      @klass.cache_enumeration.cache!
+      @klass.first.should == one
+    end
+    it 'should consider options' do
+      @klass.cache_enumeration.cache!
+      @klass.first(:order=>'id desc').should == three
+    end
   end
 
   context "finders" do
