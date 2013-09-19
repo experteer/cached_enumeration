@@ -4,7 +4,6 @@ require 'spec_helper'
 describe 'simple caching' do
   before :all do
     ActiveRecord::Base.establish_connection(:adapter => "sqlite3", :database => ":memory:")
-
     ActiveRecord::Migration.create_table :models do |t|
       t.integer :id
       t.string :name
@@ -35,7 +34,6 @@ describe 'simple caching' do
     it "should not cache if not activated" do
       @klass.all
       @klass.should_not be_cache_enumeration
-
     end
   end
 
@@ -65,9 +63,25 @@ describe 'simple caching' do
 
     it 'should fire db queries if all has parameters' do
       @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
       @klass.all(:conditions => "name = 'one'").size.should == 1
     end
 
+    it 'should fire db queries if all with parameters is used through find(:all)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.find(:all, :conditions => "name = 'one'").size.should == 1
+    end
+      
+    it 'should fire db queries if all with select parameter is used through find(:all)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      entry = @klass.find(:all, :select => "id, name").first
+      lambda {
+        entry.other
+      }.should raise_error(ActiveModel::MissingAttributeError, 'missing attribute: other')
+    end
+      
   end
 
   context 'first' do
@@ -77,7 +91,38 @@ describe 'simple caching' do
     end
     it 'should consider options' do
       @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
       @klass.first(:order=>'id desc').should == three
+    end
+    it 'should allow hash conditions (and use cache)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+      @klass.where(:name => 'three').first.should == three
+    end
+    it 'should allow hash conditions (and ask db if unhashed)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.where(:other => 'drei').first.should == three
+    end
+    it 'should allow hash conditions in first (and use cache)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+      @klass.first(:conditions => { :name => 'three' }).should == three
+    end
+    it 'should allow hash conditions in first (and ask db if unhashed)' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.first(:conditions => { :other => 'drei' }).should == three
+    end
+    it 'should allow string conditions in first' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.first(:conditions=>"name = 'three'").should == three
+    end
+    it 'should allow string conditions in where' do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.where("name = 'three'").first.should == three
     end
   end
 
