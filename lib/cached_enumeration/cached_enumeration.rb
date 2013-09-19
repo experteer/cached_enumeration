@@ -183,8 +183,11 @@ class ActiveRecord::Relation
       case
         when where_values.blank?
           cache_enumeration.all.first
-        when where_values.size == 1 && where_values[0].operator == :== &&
+        when where_values.size == 1 && 
+          where_values[0].kind_of?(Arel::Nodes::Node) &&
+          where_values[0].operator == :== &&
           cache_enumeration.options[:hashed].include?(where_values[0].left.name)
+
           cache_enumeration.get_by(where_values[0].left.name, where_values[0].right)
         else
           find_first_without_cache_enumeration
@@ -238,7 +241,7 @@ class ActiveRecord::Relation
   end
 
   def cache_enumeration_unmodified_but_where?
-    limit_value.blank? && order_values.blank? &&
+    limit_value.blank? && order_values.blank? && select_values.blank? &&
       includes_values.blank? && preload_values.blank? &&
       readonly_value.nil? && joins_values.blank? &&
       !@klass.locking_enabled?
