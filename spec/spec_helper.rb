@@ -9,8 +9,9 @@ lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 require 'cached_enumeration'
-
-
+require 'byebug'
+require 'logger'
+#ActiveRecord::Base.logger=Logger.new(STDOUT)
 RSpec.configure do |config|
   config.treat_symbols_as_metadata_keys_with_true_values = true
   config.run_all_when_everything_filtered = true
