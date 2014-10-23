@@ -17,7 +17,7 @@ describe 'association caching' do
 #    ActiveRecord::Base.logger.level=Logger::DEBUG
 
     ActiveRecord::Migration.create_table :genders do |t|
-      t.integer :id
+#      t.integer :id
       t.string :name
     end
 
@@ -30,7 +30,7 @@ describe 'association caching' do
     Gender.cache_enumeration.cache!
 
     ActiveRecord::Migration.create_table :profiles do |t|
-      t.integer :id
+ #     t.integer :id
       t.string :name
       t.integer :gender_id
     end
