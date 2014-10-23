@@ -72,7 +72,8 @@ and without cache.
     #forces a cache
     #@return Boolean true is it just cached, false if it was already cached
     def cache!
-      ensure_caches
+      #only load if loading not yet in progress
+      ensure_caches if @status == :uncached
     end
 
     def cached?
@@ -173,29 +174,38 @@ end
 module ActiveRecord
   class Relation
     def to_a_with_cache_enumeration
+      res=nil
 
-      return to_a_without_cache_enumeration unless cache_enumeration? && cache_enumeration.cached? && order_is_cached?
-      case
-        when just_modified?(:order)
-          #all and the order is cached?
-          cache_enumeration.all
-        when just_modified?(:limit, :order, :where)
-          case
-            when limit_value == 1 && where_values.blank?
-              # usually the #first case
-              [cache_enumeration.first]
-            when limit_value == 1 && where_values.present? && where_is_cached?
-              # usually "= 1" or "= ?" .first or find or find_by
-              [get_by_where]
-            when limit_value.blank? && where_values.present? && where_is_cached?
-              # usually the association case (where id in (1,2,56,6))
-              get_by_where
-            else
-              to_a_without_cache_enumeration #where is to complicated for us
-          end
-        else
-          to_a_without_cache_enumeration
+      if cache_enumeration? && cache_enumeration.cached? && order_is_cached?
+        res=case
+          when just_modified?(:order)
+            #all and the order is cached?
+            cache_enumeration.all
+          when just_modified?(:limit, :order, :where)
+            case
+              when limit_value == 1 && where_values.blank?
+                # usually the #first case
+                [cache_enumeration.first]
+              when limit_value == 1 && where_values.present? && where_is_cached?
+                # usually "= 1" or "= ?" .first or find or find_by
+                [get_by_where]
+              when limit_value.blank? && where_values.present? && where_is_cached?
+                # usually the association case (where id in (1,2,56,6))
+                get_by_where
+              else
+                to_a_without_cache_enumeration #where is to complicated for us
+            end
+        end
+
       end
+
+      if res #got a result the return it
+        res
+      else
+        cache_enumeration.cache! if cache_enumeration?
+        to_a_without_cache_enumeration
+      end
+
     end
 
     alias_method_chain :to_a, :cache_enumeration
@@ -211,31 +221,12 @@ module ActiveRecord
             take_without_cache_enumeration
         end
       else
+        cache_enumeration.cache! if cache_enumeration?
         take_without_cache_enumeration
       end
     end
 
     alias_method_chain :take, :cache_enumeration
-
-    def find_some_with_cache_enumeration(ids)
-      if cache_enumeration_unmodified_query?
-        result=ids.inject([]) do |res, id|
-          res << find_by(:id => id)
-        end.compact
-
-        if result.size == ids.size #we don't have to handle limit_value and offset_value
-          result
-        else
-          raise_record_not_found_exception!(ids, result.size, ids.size)
-        end
-
-      else
-        find_some_without_cache_enumeration(ids)
-      end
-
-    end
-
-    #alias_method_chain :find_some, :cache_enumeration
 
     private
 
