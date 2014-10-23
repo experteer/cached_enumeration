@@ -20,12 +20,9 @@ Or install it yourself as:
 
 ## Usage
 
-`
-
    class Geneder < ActiveRecord::Base
      cache_enumeration :order => 'name', :hashed => [:id,:name], :constantize => true
 
-`
 
 Now the following situations are cached:
  * `Gender.find_by(id: 1)`
