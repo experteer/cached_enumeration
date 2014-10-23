@@ -5,7 +5,7 @@ Loads your active record objects into memory so you don't have to include them.
 Currently only working for the ActiveRecord/Rails 4.1 series. See other branches for older Rails versions.
 
 ## Warning
-Some methods (by_<attributename>, cached_all) were dropped as they are not needed. Forawrdporting them should be
+Some methods (by_attributename, cached_all) were dropped as they are not needed. Forwardporting them should be
 easy.
 
 ## Installation
