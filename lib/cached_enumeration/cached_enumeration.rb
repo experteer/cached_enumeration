@@ -173,6 +173,7 @@ end
 module ActiveRecord
   class Relation
     def to_a_with_cache_enumeration
+
       return to_a_without_cache_enumeration unless cache_enumeration? && cache_enumeration.cached? && order_is_cached?
       case
         when just_modified?(:order)
