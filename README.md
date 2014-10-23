@@ -26,10 +26,23 @@ class Geneder < ActiveRecord::Base
 
 `
 
+Now the following situations are cached:
+ * Gender.find_by(id: 1)
+ * Gender.find_by(name: 'male')
+ * Gender.where(name: 'male).first
+ * Gender.all
+ * Gender.order('name').all
+
+If a Profile belongs_to a Gender you can simply write:
+  profile.gender
+end no DB query whill be executed.
+
+
 ## Contributing
 
 1. Fork it
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create new Pull Request
+4. Write specs!
+5. Push to the branch (`git push origin my-new-feature`)
+6. Create new Pull Request

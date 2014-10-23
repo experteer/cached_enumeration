@@ -21,10 +21,6 @@ describe 'simple caching' do
     @klass.create(:name => 'three', :other => 'drei')
   end
 
-  after do
-    @klass.connection.cached_enumeration_cache_clear
-  end
-
   let(:one) { @klass.find_by(:name => "one") }
   let(:three) { @klass.find_by(:name => "three") }
   let(:two) { @klass.find_by(:name => "two") }
@@ -81,22 +77,22 @@ describe 'simple caching' do
       @klass.cache_enumeration.cache!
       @klass.first.should == one
     end
-    it 'should consider options (and hit the db)' do
+    it 'should allwo string order (and use cache)' do
       @klass.cache_enumeration(:order => "other").cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.connection.should_not_receive(:exec_query)
 
       @klass.order('other').first.should == three
     end
-    it 'should allow hash conditions (and use cache)' do
+    it 'should allow hash condition (and use cache)' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_not_receive(:exec_query)
 
       @klass.where(:name => 'three').first.should == three
     end
-    it 'should allow hash conditions (and ask db if unhashed)' do
+    it 'should allow string conditions (and ask db)' do
       @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).twice.and_call_original
-      @klass.where(:other => 'drei').first.should == three
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.where("other = 'drei'").first.should == three
     end
 
     it 'should allow hash conditions in first (and use cache)' do
@@ -105,15 +101,15 @@ describe 'simple caching' do
       @klass.where(:name => 'three' ).first.should == three
     end
 
-    it 'should allow string conditions in first' do
+    it 'should allow conditions for first (and use db)' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.where("name = 'three'").first.should == three
+      @klass.where("other = 'drei'").first.should == three
     end
-    it 'should allow string conditions in where' do
+    it 'should allow conditions for first (and use db)' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.where("name = 'three'").first.should == three
+      expect(@klass.where("name = 'three'").first).not_to be_nil
     end
   end
 
@@ -123,8 +119,6 @@ describe 'simple caching' do
     end
 
     it 'should find objects providing id' do
-      three=@klass.find_by(:name => "three")
-
       @klass.cache_enumeration.cache!
       @klass.connection.should_not_receive(:exec_query)
 
@@ -132,13 +126,19 @@ describe 'simple caching' do
       @klass.find(one.id).frozen?().should eq(true)
       @klass.find([one.id])[0].id.should == one.id
       @klass.find([]).size.should == 0
-      @klass.find([one.id, three.id]).collect { |item| item.id }.should == [one.id, three.id]
+
       lambda { @klass.find(0) }.should raise_error(ActiveRecord::RecordNotFound)
       lambda { @klass.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
     end
 
-    it 'should find objects by id' do
-      one
+    it "should find an array of object ids (and hit cache)" do
+      @klass.cache_enumeration.cache!
+      @klass.connection.should_not_receive(:exec_query)
+
+      @klass.find([one.id, three.id]).collect { |item| item.id }.should == [one.id, three.id]
+    end
+
+    it 'should find_by' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_not_receive(:exec_query)
 
@@ -186,15 +186,17 @@ describe 'simple caching' do
     end
 
     it 'should constantize other fields' do
-
-      @klass.cache_enumeration(:constantize => 'other')
+      @klass.cache_enumeration(:constantize => 'other').cache!
       @klass.cache_enumeration.options[:constantize].should == 'other'
+      @klass.connection.should_not_receive(:exec_query)
+
       @klass::EINS.id.should == one.id
     end
 
     it "should contantize by lambda" do
+      @klass.cache_enumeration(:constantize => lambda { |model| model.other }).cache!
+      @klass.connection.should_not_receive(:exec_query)
 
-      @klass.cache_enumeration(:constantize => lambda { |model| model.other })
       @klass::EINS.id.should == one.id
     end
   end

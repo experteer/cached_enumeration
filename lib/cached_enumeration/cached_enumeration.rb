@@ -84,7 +84,7 @@ and without cache.
     end
 
     def first
-      @cache[order].first[1]
+      @all.first
     end
 
     private
@@ -93,28 +93,22 @@ and without cache.
       return false if cached? || caching?
       @status=:caching
 
-      hashes = Hash.new do |hash, key|
+      @cache = Hash.new do |hash, key|
         hash[key]=Hash.new
       end
 
       # the next line is weird but I want to have to Array so I use select
       # to dereference the relation
-      @all = @klass.order(@options[:order]).all
-      @klass.connection.cached_enumeration_cache do
-        @klass.order(@options[:order]).all.to_a #just to execute the query
-      end
+      @all = @klass.order(@options[:order]).all.to_a.freeze
 
       @all.each do |entry|
-        #entry.freeze # no one should mess with the entries
         @options[:hashed].each do |att|
-          #         puts "hashing: #{att}"
-          hashes[att.to_s][entry.send(att)] = entry.freeze
+          @cache[att.to_s][entry.send(att)] = entry.freeze
         end
       end
 
       create_constants if @options[:constantize]
 
-      @cache=hashes
       @klass.logger.try(:info, "Filled cache of #{@klass.name}: #{@options.inspect}")
       @status=:cached
       true
@@ -147,21 +141,18 @@ and without cache.
       proc=@options[:constantize].respond_to?(:call)
 
       @all.each do |model|
-        if proc
-          const_name=@options[:constantize].call(model).upcase
+        const_name = if proc
+          @options[:constantize].call(model).upcase
         else
-          const_name=model.send(@options[:constantize]).upcase
+          model.send(@options[:constantize]).upcase
         end
 
-        #puts "caching: #{self.name}::#{const_name}"
         @klass.const_set const_name, model
       end
     end
 
     def patch_const_missing(base_singleton)
-      # no class caching in derived classes
-      # introduced to avoid issues with Sales::ProductDomain 
-      # and it's descendents
+      # no class caching in derived classes!
       return if @klass.parent.respond_to? :const_missing_with_cache_enumeration
       @klass.extend ConstMissing
       base_singleton.alias_method_chain :const_missing, :cache_enumeration
@@ -178,117 +169,52 @@ and without cache.
     end
   end
 end
-require 'active_record/connection_adapters/abstract_adapter'
 
 module ActiveRecord
-  module ConnectionAdapters
-    class AbstractAdapter
-      def cached_enumeration_cache_clear
-        #puts "clearing"
-        @cached_enumeration_cache = Hash.new { |h, sql| h[sql] = {} }
-      end
-
-      def cached_enumeration_cache
-        #NOT! THREADSAVE
-        old, @cached_enumeration_cache_enabled = @cached_enumeration_cache_enabled, true
-        yield
-      ensure
-        @cached_enumeration_cache_enabled=old
-      end
-
-      def select_all_with_cache_enumeration(arel, name = nil, binds = [])
-        if !locked?(arel) #never ever cache things like 'FOR UPDATE'
-          arel, binds = binds_from_relation arel, binds
-          sql = to_sql(arel, binds)
-          debugger
-          cached_enumeration_cache_sql(sql, binds) { select_all_without_cache_enumeration(sql, name, binds) } ||
-            select_all_without_cache_enumeration(arel, name, binds)
-        else
-          select_all_without_cache_enumeration(sql, name, binds)
-        end
-
-      end
-
-      alias_method_chain :select_all, :cache_enumeration
-
-      def cached_enumeration_cache_sql(sql, binds)
-        @cached_enumeration_cache ||= Hash.new { |h, sql| h[sql] = {} }
-
-        if @cached_enumeration_cache[sql].key?(binds)
-          #ActiveSupport::Notifications.instrument("sql.active_record",
-          #                                        :sql => sql,
-          # :binds => binds,
-          # :name => "ENUM CACHE",
-          # :connection_id => object_id)
-          @cached_enumeration_cache[sql][binds]
-        else
-          if @cached_enumeration_cache_enabled
-            res=@cached_enumeration_cache[sql][binds]=yield
-            #puts "caching ----->"
-            #p @cached_enumeration_cache
-            res
-          else
-            nil #this is important as this is a sign that the normal caching should be done
-          end
-        end
-      end
-
-    end
-  end
-
-#I override find_one, find_some and all so they do a cache lookup first
   class Relation
-
-    def first_with_cache_enumeration(limit=nil)
-      unless limit
-        equal_op = nil
-
-        if cache_enumeration? && cache_enumeration_unmodified_but_where?
+    def to_a_with_cache_enumeration
+      return to_a_without_cache_enumeration unless cache_enumeration? && cache_enumeration.cached? && order_is_cached?
+      case
+        when just_modified?(:order)
+          #all and the order is cached?
+          cache_enumeration.all
+        when just_modified?(:limit, :order, :where)
           case
-            when where_values.blank?
-              cache_enumeration.first #tsk the first value of the default order
-            when where_values.size == 1 &&
-              where_values[0].kind_of?(Arel::Nodes::Node) &&
-              where_values[0].operator == :== &&
-              cache_enumeration.hashed_by?(where_values[0].left.name)
-
-              cache_enumeration.get_by(where_values[0].left.name, where_values[0].right)
+            when limit_value == 1 && where_values.blank?
+              # usually the #first case
+              [cache_enumeration.first]
+            when limit_value == 1 && where_values.present? && where_is_cached?
+              # usually "= 1" or "= ?" .first or find or find_by
+              [get_by_where]
+            when limit_value.blank? && where_values.present? && where_is_cached?
+              # usually the association case (where id in (1,2,56,6))
+              get_by_where
             else
-              first_without_cache_enumeration
+              to_a_without_cache_enumeration #where is to complicated for us
           end
         else
-          first_without_cache_enumeration
-        end
-
-      else
-        first_without_cache_enumeration
+          to_a_without_cache_enumeration
       end
     end
 
-    alias_method_chain :first, :cache_enumeration
+    alias_method_chain :to_a, :cache_enumeration
 
-    def find_by_with_cache_enumeration(*args)
-
-      if args[0].kind_of?(Hash)
-        by_key=args[0].keys.first
-        #p "lookup: #{by_key}"
-        if args[0].size==1 && cache_enumeration.hashed_by?(by_key)
-          res=cache_enumeration.get_by(by_key, args[0][by_key])
-          #p "found: #{by_key} #{res.inspect}"
-          res
+    def take_with_cache_enumeration
+      if cache_enumeration? && cache_enumeration.cached?
+        case
+          #when just_modified?(:limit)
+          #  cache_enumeration.first #tsk the first value of the default order
+          when just_modified?(:where) && where_is_cached?
+            get_by_where
+          else
+            take_without_cache_enumeration
         end
       else
-        find_by_without_cache_enumeration(*args)
+        take_without_cache_enumeration
       end
     end
 
-    alias_method_chain :find_by, :cache_enumeration
-
-    def find_one_with_cache_enumeration(id)
-      find_some([id]).first
-    end
-
-    alias_method_chain :find_one, :cache_enumeration
+    alias_method_chain :take, :cache_enumeration
 
     def find_some_with_cache_enumeration(ids)
       if cache_enumeration_unmodified_query?
@@ -308,21 +234,55 @@ module ActiveRecord
 
     end
 
-    alias_method_chain :find_some, :cache_enumeration
+    #alias_method_chain :find_some, :cache_enumeration
 
     private
 
-    def cache_enumeration_unmodified_query?
-      where_values.blank? &&
-        cache_enumeration_unmodified_but_where?
+    def get_by_where
+      att_name=where_values[0].left.name
+      identifier = where_values[0].right
+
+      if identifier.kind_of?(Array)
+        identifier.map do |id|
+          cache_enumeration.get_by(att_name, id)
+        end.compact
+      else
+        identifier=bind_values[0][1] if identifier=='?'
+        cache_enumeration.get_by(att_name, identifier)
+      end
     end
 
-    #the ordering of first is "id"
-    def cache_enumeration_unmodified_but_where?
-      limit_value.blank? && order_values.blank? && (select_values.blank? || select_values.empty?) &&
-        includes_values.blank? && preload_values.blank? &&
-        readonly_value.nil? && joins_values.blank? &&
-        !@klass.locking_enabled?
+    # just one ascending order which is the same as the cached one or none
+    def order_is_cached?
+      order_values.empty? || (
+      order_values.size == 1 &&
+        ((order_values[0].respond_to?(:ascending?) && order_values[0].ascending? &&
+          cache_enumeration.order == order_values[0].expr.name) ||
+          order_values[0] == cache_enumeration.order #sometimes the order is just as string
+        )
+      )
+    end
+
+    def where_is_cached?
+      where_values.size == 1 &&
+        where_values[0].kind_of?(Arel::Nodes::Node) &&
+        where_values[0].operator == :== &&
+        cache_enumeration.hashed_by?(where_values[0].left.name)
+    end
+
+    #*modified is an array like :limit, :where, :order, :select, :includes, :preload
+    #:readonly
+    def just_modified?(*modified)
+      return false if @klass.locking_enabled?
+      return false if limit_value.present? && !modified.include?(:limit)
+      return false if where_values.present? && !modified.include?(:where)
+      return false if order_values.present? && !modified.include?(:order)
+      return false if select_values.present? && !modified.include?(:select)
+      return false if includes_values.present? && !modified.include?(:includes)
+      return false if preload_values.present? && !modified.include?(:preload)
+      return false if readonly_value.present? && !modified.include?(:readonly)
+      return false if joins_values.present? && !modified.include?(:joins)
+      true
     end
   end
 
@@ -340,7 +300,7 @@ module ActiveRecord
       end
 
       def cache_enumeration?
-        !@cache_enumeration.nil?
+        @cache_enumeration.present?
       end
 
     end
