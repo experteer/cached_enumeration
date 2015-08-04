@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "sqlite3","1.3.8"
 #  spec.add_development_dependency "byebug"
 #  spec.add_development_dependency "rubinius-debugger"
-  spec.add_dependency "activerecord","~> 4.1"
+  spec.add_dependency "activerecord","~> 4.1.0"
 
 end
 
