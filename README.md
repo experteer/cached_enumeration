@@ -2,11 +2,17 @@
 
 Loads your active record objects into memory so you don't have to include them.
 
-Currently only working for the ActiveRecord/Rails 4.1 series. See other branches for older Rails versions.
-
 ## Warning
-Some methods (by_attributename, cached_all) were dropped as they are not needed. Forwardporting them should be
-easy.
+Prior to Rails 4.2, it was possible to cache using `find`, `find_by` and
+`find_by_xyz`, as well as caching associations. Due to some
+[performance improvements](http://tenderlovemaking.com/2014/02/19/adequaterecord-pro-like-activerecord.html)
+this is not possible anymore. Now there is a SQL statement cache for those
+methods, which means that they do not have to transform the Rails code to SQL
+more than once. Unfortunately, that process was used by this gem to hook into
+ActiveRecrod and prevent database access if possible.
+
+Instead of the find methods, use `where().first`. Unfortunately, there is no
+equivalent for the associations.
 
 ## Installation
 
@@ -29,8 +35,6 @@ Or install it yourself as:
 
 
 Now the following situations are cached:
- * `Gender.find_by(id: 1)`
- * `Gender.find_by(name: 'male')`
  * `Gender.where(name: 'male).first`
  * `Gender.all`
  * `Gender.order('name').all`

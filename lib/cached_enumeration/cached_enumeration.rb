@@ -1,22 +1,16 @@
 module CachedEnumeration
 =begin rdoc
 provide cached access to enumeration values
-       
+
 usage: add cache_enumeration <params> to ActiveRecord class
 
 parameters are
-  :order  order of items in cached_all (default: 'id')
+  :order  order of items in cache (default: 'id')
   :hashed list of attributes to provide hashes for (default: [ 'id', 'name' ];
   :hashed list of attributes to provide hashes for (default: [ 'id', 'name' ];
           id will always be added to that list, if missing
   :constantize  attribute to provide constants for (default: 'name')
               use nil, not to generate constants
-
-cached methods are:
-find_from_ids( <id> ) or find_from_ids( [ <id>, <id>, ... ] )
-   providing cached  find( <id> ) or find( [ <id>, <id>, ... ] )
-find_by_XY / by_XY for all hashed attributes (by_XY is deprecated)
-cached_all 
 
 besides constants using the upcase name are set up providing the entries
 
@@ -26,29 +20,22 @@ to avoid unintentional changes.
 Cachability of enumerations does not imply that all enumeration access should
 be cached. This is a question that needs to be well thought depending on the
 size of the enumeration and the number of accesses to the cached data.
-
-The by_XY finder should be avoided as the find_by_XY will be available with
-and without cache.
 =end
   class Cache
     attr_reader :options
 
     def initialize(base, params)
-#      p params
       @options=init_options(params)
       @cache={} #cache by keys
       @all=[] #cache of all
-      @status=:uncached #can be :uncached,:cashing,:cached
+      @status=:uncached #can be :uncached,:caching,:cached
       @klass=base
 
-      #base.extend(ClassMethods)
-      #base.reset_column_information
       base_singleton = class << base;
         self
       end
 
       patch_const_missing(base_singleton) if @options[:constantize]
-#create_find_by_methods(base_singleton)
     end
 
     def all
@@ -72,7 +59,6 @@ and without cache.
     #forces a cache
     #@return Boolean true is it just cached, false if it was already cached
     def cache!
-      #only load if loading not yet in progress
       ensure_caches if @status == :uncached
     end
 
@@ -138,7 +124,6 @@ and without cache.
     end
 
     def create_constants
-      #puts "creating constants #{self.name}"
       proc=@options[:constantize].respond_to?(:call)
 
       @all.each do |model|
