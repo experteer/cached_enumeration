@@ -21,9 +21,9 @@ describe 'simple caching' do
     @klass.create(:name => 'three', :other => 'drei')
   end
 
-  let(:one) { @klass.find_by(:name => "one") }
-  let(:three) { @klass.find_by(:name => "three") }
-  let(:two) { @klass.find_by(:name => "two") }
+  let!(:one) { @klass.find_by(:name => "one") }
+  let!(:three) { @klass.find_by(:name => "three") }
+  let!(:two) { @klass.find_by(:name => "two") }
 
   context "cache_enumeration?" do
     it "should return the rigth value" do
@@ -77,7 +77,7 @@ describe 'simple caching' do
       @klass.cache_enumeration.cache!
       expect(@klass.first).to eq(one)
     end
-    it 'should allwo string order (and use cache)' do
+    it 'should allow string order (and use cache)' do
       @klass.cache_enumeration(:order => "other").cache!
       expect(@klass.connection).not_to receive(:exec_query)
 

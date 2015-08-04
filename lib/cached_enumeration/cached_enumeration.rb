@@ -239,7 +239,7 @@ module ActiveRecord
           cache_enumeration.get_by(att_name, id)
         end.compact
       else
-        identifier=bind_values[0][1] if identifier=='?' || identifier=='$1'
+        identifier=bind_values[0][1] if identifier=='?' || identifier=='$1' || identifier.kind_of?(Arel::Nodes::BindParam)
         cache_enumeration.get_by(att_name, identifier)
       end
     end
