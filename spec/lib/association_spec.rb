@@ -51,8 +51,8 @@ describe 'association caching' do
       him
       him.reload #to empty the assoc cache
 
-      Gender.connection.should_not_receive(:exec_query)
-      him.gender.name.should == 'male'
+      expect(Gender.connection).not_to receive(:exec_query)
+      expect(him.gender.name).to eq('male')
     end
 
 =begin
