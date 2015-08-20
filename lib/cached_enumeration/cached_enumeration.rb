@@ -1,7 +1,7 @@
 module CachedEnumeration
 =begin rdoc
 provide cached access to enumeration values
-       
+
 usage: add cache_enumeration <params> to ActiveRecord class
 
 parameters are
@@ -15,7 +15,7 @@ cached methods are:
 find_from_ids( <id> ) or find_from_ids( [ <id>, <id>, ... ] )
    providing cached  find( <id> ) or find( [ <id>, <id>, ... ] )
 find_by_XY / by_XY for all hashed attributes (by_XY is deprecated)
-cached_all 
+cached_all
 
 besides constants using the upcase name are set up providing the entries
 
@@ -139,23 +139,22 @@ and without cache.
     def create_find_by_methods(base_singleton)
       @options[:hashed].each do |att|
         if att == 'id'
-          base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
+          base_singleton.__send__(:define_method, "by_#{att}") do |key|
             #rewrite to use column type
             cache_enumeration.get_by(att, key.to_i)
           end
         else
-          base_singleton.__send__(:define_method, "find_by_#{att}") do |key|
+          base_singleton.__send__(:define_method, "by_#{att}") do |key|
             cache_enumeration.get_by(att, key)
           end
         end
-        base_singleton.__send__(:alias_method, "by_#{att}", "find_by_#{att}")
       end
 
     end
 
     def patch_const_missing(base_singleton)
       # no class caching in derived classes
-      # introduced to avoid issues with Sales::ProductDomain 
+      # introduced to avoid issues with Sales::ProductDomain
       # and it's descendents
       return if @klass.parent.respond_to? :const_missing_with_cache_enumeration
       @klass.extend ConstMissing
@@ -174,54 +173,7 @@ and without cache.
   end
 end
 
-#I override find_one, find_some and all so they do a cache lookup first
 class ActiveRecord::Relation
-
-  def find_first_with_cache_enumeration
-    equal_op = nil
-    if cache_enumeration_unmodified_but_where? && cache_enumeration?
-      case
-        when where_values.blank?
-          cache_enumeration.all.first
-        when where_values.size == 1 && 
-          where_values[0].kind_of?(Arel::Nodes::Node) &&
-          where_values[0].operator == :== &&
-          cache_enumeration.options[:hashed].include?(where_values[0].left.name)
-
-          cache_enumeration.get_by(where_values[0].left.name, where_values[0].right)
-        else
-          find_first_without_cache_enumeration
-      end
-    else
-      find_first_without_cache_enumeration
-    end
-  end
-
-  alias_method_chain :find_first, :cache_enumeration
-
-  def find_one_with_cache_enumeration(id)
-    if cache_enumeration_unmodified_query? && cache_enumeration?
-      cache_enumeration.get_by('id', id.to_i) ||
-        raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}")
-    else
-      find_one_without_cache_enumeration(id)
-    end
-  end
-
-  alias_method_chain :find_one, :cache_enumeration
-
-  def find_some_with_cache_enumeration(ids)
-    if cache_enumeration_unmodified_query? && cache_enumeration?
-      ids.inject([]) do |res, id|
-        res << (cache_enumeration.get_by('id', id.to_i) ||
-          raise(ActiveRecord::RecordNotFound, "Couldn't find #{name} with ID=#{id}"))
-      end
-    else
-      find_some_without_cache_enumeration(ids)
-    end
-  end
-
-  alias_method_chain :find_some, :cache_enumeration
 
   def all_with_cache_enumeration(*args)
     if cache_enumeration_unmodified_query? && args.empty? && cache_enumeration?
