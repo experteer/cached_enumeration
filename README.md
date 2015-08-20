@@ -2,7 +2,7 @@
 
 Loads your active record objects into memory so you don't have to include them.
 
-Currently only working for the ActiveRecord/Rails 2.3 series. A Rails 3.2 version is on the way.
+Currently works with Rails 3.2.
 
 ## Installation
 
@@ -20,11 +20,18 @@ Or install it yourself as:
 
 ## Usage
 
-`
-class Geneder < ActiveRecord::Base
-  cache_enumeration :order => 'name', :hashed => [:id,:name], :constantize => true
+    class Gender < ActiveRecord::Base
+      cache_enumeration :order => 'name', :hashed => [:id,:name], :constantize => true
 
-`
+
+Now the following situations are cached:
+
+* `Gender.find(1)`
+* `Gender.by_id(1)`
+* `Gender.find_by_name('male')`
+* `Gender.all`
+* `Gender::MALE`
+* `Gender::FEMALE`
 
 ## Contributing
 
