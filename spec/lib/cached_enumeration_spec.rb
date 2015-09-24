@@ -25,18 +25,6 @@ describe 'simple caching' do
   let(:three) { @klass.find_by_name("three") }
   let(:two) { @klass.find_by_name("two") }
 
-  context "cache_enumeration?" do
-    it "should return the rigth value" do
-      @klass.should_not be_cache_enumeration
-      @klass.cache_enumeration.cache!
-      @klass.should be_cache_enumeration
-    end
-    it "should not cache if not activated" do
-      @klass.all
-      @klass.should_not be_cache_enumeration
-    end
-  end
-
 
   context "cached_all and all" do
     before do
@@ -72,7 +60,7 @@ describe 'simple caching' do
       @klass.connection.should_receive(:exec_query).and_call_original
       @klass.find(:all, :conditions => "name = 'one'").size.should == 1
     end
-      
+
     it 'should fire db queries if all with select parameter is used through find(:all)' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
@@ -81,7 +69,7 @@ describe 'simple caching' do
         entry.other
       }.should raise_error(ActiveModel::MissingAttributeError, 'missing attribute: other')
     end
-      
+
   end
 
   context 'first' do
@@ -94,9 +82,9 @@ describe 'simple caching' do
       @klass.connection.should_receive(:exec_query).and_call_original
       @klass.first(:order=>'id desc').should == three
     end
-    it 'should allow hash conditions (and use cache)' do
+    it 'should allow hash conditions (and ask db)' do
       @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
+      @klass.connection.should_receive(:exec_query).and_call_original
       @klass.where(:name => 'three').first.should == three
     end
     it 'should allow hash conditions (and ask db if unhashed)' do
@@ -104,9 +92,9 @@ describe 'simple caching' do
       @klass.connection.should_receive(:exec_query).and_call_original
       @klass.where(:other => 'drei').first.should == three
     end
-    it 'should allow hash conditions in first (and use cache)' do
+    it 'should allow hash conditions in first (and ask db)' do
       @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
+      @klass.connection.should_receive(:exec_query).and_call_original
       @klass.first(:conditions => { :name => 'three' }).should == three
     end
     it 'should allow hash conditions in first (and ask db if unhashed)' do
@@ -135,16 +123,12 @@ describe 'simple caching' do
       one; three
       three=@klass.find_by_name("three")
       @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
-
-      @klass.find(one.id).id.should == one.id
-      @klass.find(one.id).frozen?().should be_true
-      @klass.find([one.id])[0].id.should == one.id
-      @klass.find([]).size.should == 0
+      @klass.connection.should_receive(:exec_query).and_call_original
       @klass.find([one.id, three.id]).collect { |item| item.id }.should == [one.id, three.id]
       lambda { @klass.find(0) }.should raise_error(ActiveRecord::RecordNotFound)
       lambda { @klass.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
     end
+
 
     it 'should find objects by_id' do
       one

@@ -22,7 +22,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake"
   spec.add_development_dependency "rspec","~> 2.3"
   spec.add_development_dependency "sqlite3","~> 1.3"
-  #spec.add_development_dependency "ruby-debug"
+  spec.add_development_dependency "pry"
   spec.add_dependency "activerecord","~> 3.2"
 
 end
