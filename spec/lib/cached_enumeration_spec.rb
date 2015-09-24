@@ -72,7 +72,7 @@ describe 'simple caching' do
       @klass.connection.should_receive(:exec_query).and_call_original
       @klass.find(:all, :conditions => "name = 'one'").size.should == 1
     end
-      
+
     it 'should fire db queries if all with select parameter is used through find(:all)' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
@@ -81,49 +81,7 @@ describe 'simple caching' do
         entry.other
       }.should raise_error(ActiveModel::MissingAttributeError, 'missing attribute: other')
     end
-      
-  end
 
-  context 'first' do
-    it 'should find the first entry' do
-      @klass.cache_enumeration.cache!
-      @klass.first.should == one
-    end
-    it 'should consider options' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:order=>'id desc').should == three
-    end
-    it 'should allow hash conditions (and use cache)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
-      @klass.where(:name => 'three').first.should == three
-    end
-    it 'should allow hash conditions (and ask db if unhashed)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.where(:other => 'drei').first.should == three
-    end
-    it 'should allow hash conditions in first (and use cache)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
-      @klass.first(:conditions => { :name => 'three' }).should == three
-    end
-    it 'should allow hash conditions in first (and ask db if unhashed)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:conditions => { :other => 'drei' }).should == three
-    end
-    it 'should allow string conditions in first' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:conditions=>"name = 'three'").should == three
-    end
-    it 'should allow string conditions in where' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.where("name = 'three'").first.should == three
-    end
   end
 
   context "finders" do
@@ -131,30 +89,12 @@ describe 'simple caching' do
       @klass.cache_enumeration(:constantize => false)
     end
 
-    it 'should find objects providing id' do
-      one; three
-      three=@klass.find_by_name("three")
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
-
-      @klass.find(one.id).id.should == one.id
-      @klass.find(one.id).frozen?().should be_true
-      @klass.find([one.id])[0].id.should == one.id
-      @klass.find([]).size.should == 0
-      @klass.find([one.id, three.id]).collect { |item| item.id }.should == [one.id, three.id]
-      lambda { @klass.find(0) }.should raise_error(ActiveRecord::RecordNotFound)
-      lambda { @klass.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
-    end
-
     it 'should find objects by_id' do
       one
       @klass.cache_enumeration.cache!
       @klass.connection.should_not_receive(:exec_query)
 
-      @klass.find_by_id(one.id).id.should == one.id
       @klass.by_id(one.id).id.should == one.id
-      @klass.find_by_id(one.id.to_s).id.should == one.id
-      @klass.find_by_id(0).should be_nil
     end
 
     it 'should find objects by_name' do
@@ -162,9 +102,7 @@ describe 'simple caching' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_not_receive(:exec_query)
 
-      @klass.find_by_name('one').id.should == one.id
       @klass.by_name('one').id.should == one.id
-      @klass.find_by_name('no such name').should be_nil
     end
 
   end
@@ -175,9 +113,7 @@ describe 'simple caching' do
       @klass.cache_enumeration(:hashed => ['id', 'other', 'name']).cache!
       @klass.connection.should_not_receive(:exec_query)
 
-      @klass.find_by_other('eins').id.should ==one.id
       @klass.by_other('eins').id.should == one.id
-      @klass.find_by_name('one').id.should ==one.id
       @klass.by_name('one').id.should == one.id
     end
   end
