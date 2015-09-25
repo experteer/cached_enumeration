@@ -69,6 +69,10 @@ size of the enumeration and the number of accesses to the cached data.
       ensure_caches
     end
 
+    def cached?
+      @status == :cached
+    end
+
     private
 
     def ensure_caches
@@ -92,11 +96,6 @@ size of the enumeration and the number of accesses to the cached data.
       @cache = hashes
       @status = :cached
       true
-    end
-
-
-    def cached?
-      @status == :cached
     end
 
     def caching?
@@ -141,7 +140,7 @@ size of the enumeration and the number of accesses to the cached data.
         cache_enumeration.all
       end
       base_singleton.__send__(:define_method, :all_with_cache_enumeration) do |*args|
-        args.empty? ? cached_all : all_without_cache_enumeration(*args)
+        cache_enumeration.cached? && args.empty? ? cached_all : all_without_cache_enumeration(*args)
       end
       base_singleton.__send__(:alias_method_chain, :all, :cache_enumeration)
     end
@@ -151,7 +150,7 @@ size of the enumeration and the number of accesses to the cached data.
         cache_enumeration.all.first
       end
       base_singleton.__send__(:define_method, :first_with_cache_enumeration) do |*args|
-        args.empty? ? cached_first : first_without_cache_enumeration(*args)
+        cache_enumeration.cached? && args.empty? ? cached_first : first_without_cache_enumeration(*args)
       end
       base_singleton.__send__(:alias_method_chain, :first, :cache_enumeration)
     end
@@ -171,7 +170,7 @@ size of the enumeration and the number of accesses to the cached data.
       end
       if @options[:hashed].include?("id")
         base_singleton.__send__(:define_method, :find_with_cache_enumeration) do |*args|
-          if args.length == 1 && args.first.respond_to?(:to_i)
+          if cache_enumeration.cached? && args.length == 1 && args.first.respond_to?(:to_i)
             by_id(args.first).tap{|res| raise ActiveRecord::RecordNotFound if res.nil? }
           else
             find_without_cache_enumeration(*args)
