@@ -5,7 +5,6 @@ describe 'simple caching' do
   before :all do
     ActiveRecord::Base.establish_connection(:adapter => "sqlite3", :database => ":memory:")
     ActiveRecord::Migration.create_table :models do |t|
-      t.integer :id
       t.string :name
       t.string :other
     end
@@ -38,7 +37,6 @@ describe 'simple caching' do
 
       @klass.cached_all.size.should == 3
       @klass.cached_all.collect { |item| item.id }.should == [one.id, two.id, three.id]
-      @klass.cached_all.frozen?().should be_true
 
       @klass.all.should == @klass.cached_all
     end
@@ -46,28 +44,7 @@ describe 'simple caching' do
     it "should fire db queries if all is modified" do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.where("name in ('one','two')").all.size.should == 2
-    end
-
-    it 'should fire db queries if all has parameters' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.all(:conditions => "name = 'one'").size.should == 1
-    end
-
-    it 'should fire db queries if all with parameters is used through find(:all)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.find(:all, :conditions => "name = 'one'").size.should == 1
-    end
-
-    it 'should fire db queries if all with select parameter is used through find(:all)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      entry = @klass.find(:all, :select => "id, name").first
-      lambda {
-        entry.other
-      }.should raise_error(ActiveModel::MissingAttributeError, 'missing attribute: other')
+      @klass.where("name in ('one','two')").size.should == 2
     end
 
   end
@@ -76,11 +53,6 @@ describe 'simple caching' do
     it 'should find the first entry' do
       @klass.cache_enumeration.cache!
       @klass.first.should == one
-    end
-    it 'should consider options' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:order=>'id desc').should == three
     end
     it 'should allow hash conditions (and ask db)' do
       @klass.cache_enumeration.cache!
@@ -91,21 +63,6 @@ describe 'simple caching' do
       @klass.cache_enumeration.cache!
       @klass.connection.should_receive(:exec_query).and_call_original
       @klass.where(:other => 'drei').first.should == three
-    end
-    it 'should allow hash conditions in first (and ask db)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:conditions => { :name => 'three' }).should == three
-    end
-    it 'should allow hash conditions in first (and ask db if unhashed)' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:conditions => { :other => 'drei' }).should == three
-    end
-    it 'should allow string conditions in first' do
-      @klass.cache_enumeration.cache!
-      @klass.connection.should_receive(:exec_query).and_call_original
-      @klass.first(:conditions=>"name = 'three'").should == three
     end
     it 'should allow string conditions in where' do
       @klass.cache_enumeration.cache!
@@ -129,6 +86,9 @@ describe 'simple caching' do
       lambda { @klass.find(nil) }.should raise_error(ActiveRecord::RecordNotFound)
     end
 
+    it "honors scopes" do
+      lambda { @klass.where(:name => "foo").find(one.id) }.should raise_error(ActiveRecord::RecordNotFound)
+    end
 
     it 'should find objects by_id' do
       one

@@ -83,7 +83,11 @@ size of the enumeration and the number of accesses to the cached data.
         hash[key] = Hash.new
       end
 
-      @all = @klass.order(@options[:order]).all.freeze
+      # We would like to freeze @all, but
+      # cannot since it is not an array at
+      # this point, but can be @klass itself.
+      @all = @klass.order(@options[:order])
+
       @all.each do |entry|
         entry.freeze # no one should mess with the entries
         @options[:hashed].each do |att|
@@ -139,18 +143,18 @@ size of the enumeration and the number of accesses to the cached data.
       base_singleton.__send__(:define_method, :cached_all) do
         cache_enumeration.all
       end
-      base_singleton.__send__(:define_method, :all_with_cache_enumeration) do |*args|
-        cache_enumeration.cached? && args.empty? ? cached_all : all_without_cache_enumeration(*args)
+      base_singleton.__send__(:define_method, :all_with_cache_enumeration) do
+        cache_enumeration.cached? && current_scope.nil? ? cached_all : all_without_cache_enumeration
       end
       base_singleton.__send__(:alias_method_chain, :all, :cache_enumeration)
     end
 
     def alias_first_method(base_singleton)
-      base_singleton.__send__(:define_method, :cached_first) do
-        cache_enumeration.all.first
+      base_singleton.__send__(:define_method, :cached_first) do |limit = nil|
+        limit.nil? ? cache_enumeration.all.first : cache_enumeration.all.take(limit)
       end
-      base_singleton.__send__(:define_method, :first_with_cache_enumeration) do |*args|
-        cache_enumeration.cached? && args.empty? ? cached_first : first_without_cache_enumeration(*args)
+      base_singleton.__send__(:define_method, :first_with_cache_enumeration) do |limit = nil|
+        cache_enumeration.cached? && current_scope.nil? ? cached_first(limit) : first_without_cache_enumeration(limit)
       end
       base_singleton.__send__(:alias_method_chain, :first, :cache_enumeration)
     end
@@ -170,7 +174,7 @@ size of the enumeration and the number of accesses to the cached data.
       end
       if @options[:hashed].include?("id")
         base_singleton.__send__(:define_method, :find_with_cache_enumeration) do |*args|
-          if cache_enumeration.cached? && args.length == 1 && args.first.respond_to?(:to_i)
+          if cache_enumeration.cached? && current_scope.nil? && args.length == 1 && args.first.respond_to?(:to_i)
             by_id(args.first).tap{|res| raise ActiveRecord::RecordNotFound if res.nil? }
           else
             find_without_cache_enumeration(*args)
