@@ -2,7 +2,7 @@
 
 Loads your active record objects into memory so you don't have to include them.
 
-Currently works with Rails 3.2.
+Currently works with Rails 4.2.
 
 ## Installation
 
