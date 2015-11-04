@@ -73,6 +73,10 @@ size of the enumeration and the number of accesses to the cached data.
       @status == :cached
     end
 
+    def caching?
+      @status == :caching
+    end
+
     private
 
     def ensure_caches
@@ -96,10 +100,6 @@ size of the enumeration and the number of accesses to the cached data.
       @cache = hashes
       @status = :cached
       true
-    end
-
-    def caching?
-      @status == :caching
     end
 
     def init_options(params)
@@ -181,22 +181,28 @@ size of the enumeration and the number of accesses to the cached data.
     end
 
     def patch_const_missing(base_singleton)
-      # No class caching in derived classes
-      # Introduced to avoid issues with Sales::ProductDomain
-      # and it's descendents
-      return if @klass.parent.respond_to? :const_missing_with_cache_enumeration
-      @klass.extend ConstMissing
-      base_singleton.alias_method_chain :const_missing, :cache_enumeration
-    end
-
-    module ConstMissing
-      def const_missing_with_cache_enumeration(const_name)
-        if cache_enumeration.cache! # if we just cached
-          self.const_get(const_name) # try again
-        else
-          const_missing_without_cache_enumeration(const_name) # fails as usual
+      base_singleton.__send__(:define_method, :const_missing_with_cache_enumeration) do |const_name|
+        if cache_enumeration.cached? || cache_enumeration.caching?
+          const_missing_without_cache_enumeration(const_name)
+        elsif cache_enumeration.cache!
+          self.const_get(const_name)
         end
       end
+      base_singleton.__send__(:alias_method_chain, :const_missing, :cache_enumeration)
+    end
+  end
+
+  class NoCache
+    def cached?
+      false
+    end
+
+    def caching?
+      false
+    end
+
+    def cache!
+      false
     end
   end
 end
@@ -207,6 +213,8 @@ module ActiveRecord
       def cache_enumeration(params = {})
         if params[:reset]
           @cache_enumeration = nil
+        elsif self.parent.respond_to? :const_missing_with_cache_enumeration
+          @cache_enumeration ||= CachedEnumeration::NoCache.new
         else
           @cache_enumeration ||= CachedEnumeration::Cache.new(self, params)
         end
