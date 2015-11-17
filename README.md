@@ -33,6 +33,14 @@ Now the following situations are cached:
 * `Gender::MALE`
 * `Gender::FEMALE`
 
+## Development
+
+    docker run -it \
+      --name cached_enumeration \
+      --volume $PWD:/home/default/cached_enumeration \
+      --workdir /home/default/cached_enumeration \
+      <ruby-image>
+
 ## Contributing
 
 1. Fork it
