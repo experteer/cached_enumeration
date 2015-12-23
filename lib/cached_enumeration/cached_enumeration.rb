@@ -143,10 +143,6 @@ size of the enumeration and the number of accesses to the cached data.
       base_singleton.__send__(:define_method, :cached_all) do
         cache_enumeration.all
       end
-      base_singleton.__send__(:define_method, :all_with_cache_enumeration) do
-        cache_enumeration.cached? && current_scope.nil? ? cached_all : all_without_cache_enumeration
-      end
-      base_singleton.__send__(:alias_method_chain, :all, :cache_enumeration)
     end
 
     def alias_first_method(base_singleton)
