@@ -33,12 +33,13 @@ describe 'simple caching' do
     it 'should provide cached_all' do
       one; two; three
       @klass.cache_enumeration.cache!
-      @klass.connection.should_not_receive(:exec_query)
+      # only .all should trigger a query, .cached_all should not
+      @klass.connection.should_receive(:exec_query).once.and_call_original
 
       @klass.cached_all.size.should == 3
       @klass.cached_all.collect { |item| item.id }.should == [one.id, two.id, three.id]
 
-      @klass.all.should == @klass.cached_all
+      @klass.all.map(&:id).should == @klass.cached_all.map(&:id)
     end
 
     it "should fire db queries if all is modified" do
@@ -131,10 +132,23 @@ describe 'simple caching' do
       @klass.cache_enumeration(:order => 'name').cache!
       @klass.connection.should_not_receive(:exec_query)
 
-      @klass.cached_all.collect { |item| item.id }.should == [one.id, three.id, two.id]
-      @klass.cached_all.should == @klass.all
+      @klass.cached_all.map(&:id).should == [one.id, three.id, two.id]
     end
 
+    it "overwrites order if scope is modified" do
+      @klass.cache_enumeration.cache!
+      @klass.all.map(&:id).should == [one.id, two.id, three.id]
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.order(:name).map(&:id).should == [one.id, three.id, two.id]
+    end
+  end
+  context "sorting of first" do
+    it "overwrites order if scope is modified" do
+      @klass.cache_enumeration.cache!
+      @klass.first.id.should == one.id
+      @klass.connection.should_receive(:exec_query).and_call_original
+      @klass.order(:other).first.id.should == three.id # "drei" appears before "eins"
+    end
   end
   context "constantize" do
     it "should constantize name by default" do
