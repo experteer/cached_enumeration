@@ -152,7 +152,8 @@ size of the enumeration and the number of accesses to the cached data.
       base_singleton.__send__(:define_method, :first_with_cache_enumeration) do |limit = nil|
         cache_enumeration.cached? && current_scope.nil? ? cached_first(limit) : first_without_cache_enumeration(limit)
       end
-      base_singleton.__send__(:alias_method_chain, :first, :cache_enumeration)
+      base_singleton.__send__(:alias_method, :first_without_cache_enumeration, :first)
+      base_singleton.__send__(:alias_method, :first, :first_with_cache_enumeration)
     end
 
     def create_by_methods(base_singleton)
@@ -176,7 +177,8 @@ size of the enumeration and the number of accesses to the cached data.
             find_without_cache_enumeration(*args)
           end
         end
-        base_singleton.__send__(:alias_method_chain, :find, :cache_enumeration)
+        base_singleton.__send__(:alias_method, :find_without_cache_enumeration, :find)
+        base_singleton.__send__(:alias_method, :find, :find_with_cache_enumeration)
       end
     end
 
@@ -188,7 +190,8 @@ size of the enumeration and the number of accesses to the cached data.
           self.const_get(const_name)
         end
       end
-      base_singleton.__send__(:alias_method_chain, :const_missing, :cache_enumeration)
+      base_singleton.__send__(:alias_method, :const_missing_without_cache_enumeration, :const_missing)
+      base_singleton.__send__(:alias_method, :const_missing, :const_missing_with_cache_enumeration)
     end
   end
 
