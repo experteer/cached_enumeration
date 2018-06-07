@@ -145,15 +145,29 @@ size of the enumeration and the number of accesses to the cached data.
       end
     end
 
-    def alias_first_method(base_singleton)
-      base_singleton.__send__(:define_method, :cached_first) do |limit = nil|
+    module FirstWithCacheEnumeration
+      def first(limit=nil)
+        cache_enumeration.cached? && current_scope.nil? ? cached_first(limit) : super(limit)
+      end
+
+      private
+      def cached_first(limit=nil)
         limit.nil? ? cache_enumeration.all.first : cache_enumeration.all.take(limit)
       end
-      base_singleton.__send__(:define_method, :first_with_cache_enumeration) do |limit = nil|
-        cache_enumeration.cached? && current_scope.nil? ? cached_first(limit) : first_without_cache_enumeration(limit)
+    end
+
+    def alias_first_method(base_singleton)
+      base_singleton.__send__(:prepend, FirstWithCacheEnumeration)
+    end
+
+    module FindWithCacheEnumeration
+      def find(*args)
+        if cache_enumeration.cached? && current_scope.nil? && args.length == 1 && args.first.respond_to?(:to_i)
+          by_id(args.first).tap{|res| raise ActiveRecord::RecordNotFound if res.nil? }
+        else
+          super(*args)
+        end
       end
-      base_singleton.__send__(:alias_method, :first_without_cache_enumeration, :first)
-      base_singleton.__send__(:alias_method, :first, :first_with_cache_enumeration)
     end
 
     def create_by_methods(base_singleton)
@@ -170,28 +184,22 @@ size of the enumeration and the number of accesses to the cached data.
         base_singleton.__send__(:alias_method, "find_by_#{att}", "by_#{att}")
       end
       if @options[:hashed].include?("id")
-        base_singleton.__send__(:define_method, :find_with_cache_enumeration) do |*args|
-          if cache_enumeration.cached? && current_scope.nil? && args.length == 1 && args.first.respond_to?(:to_i)
-            by_id(args.first).tap{|res| raise ActiveRecord::RecordNotFound if res.nil? }
-          else
-            find_without_cache_enumeration(*args)
-          end
-        end
-        base_singleton.__send__(:alias_method, :find_without_cache_enumeration, :find)
-        base_singleton.__send__(:alias_method, :find, :find_with_cache_enumeration)
+        base_singleton.__send__(:prepend, FindWithCacheEnumeration)
       end
     end
 
-    def patch_const_missing(base_singleton)
-      base_singleton.__send__(:define_method, :const_missing_with_cache_enumeration) do |const_name|
+    module ConstMissingWithCacheEnumeration
+      def const_missing(const_name)
         if cache_enumeration.cached? || cache_enumeration.caching?
-          const_missing_without_cache_enumeration(const_name)
+          super(const_name)
         elsif cache_enumeration.cache!
           self.const_get(const_name)
         end
       end
-      base_singleton.__send__(:alias_method, :const_missing_without_cache_enumeration, :const_missing)
-      base_singleton.__send__(:alias_method, :const_missing, :const_missing_with_cache_enumeration)
+    end
+
+    def patch_const_missing(base_singleton)
+      base_singleton.__send__(:prepend, ConstMissingWithCacheEnumeration)
     end
   end
 
