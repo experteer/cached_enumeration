@@ -216,7 +216,7 @@ module ActiveRecord
       def cache_enumeration(params = {})
         if params[:reset]
           @cache_enumeration = nil
-        elsif self.parent.respond_to? :const_missing_with_cache_enumeration
+        elsif self.module_parent.respond_to? :const_missing_with_cache_enumeration
           @cache_enumeration ||= CachedEnumeration::NoCache.new
         else
           @cache_enumeration ||= CachedEnumeration::Cache.new(self, params)
